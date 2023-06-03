@@ -1,0 +1,60 @@
+version: "3.8"
+
+services:
+  django:
+    build: .
+    container_name: django
+    command: bash -c "python manage.py migrate && python manage.py runserver 0.0.0.0:${LOCAL_DJANGO_PORT}"
+    volumes:
+      - .:/usr/src/app/
+    expose:
+      - ${LOCAL_DJANGO_PORT}
+    ports:
+      - "${LOCAL_DJANGO_PORT}:${REMOTER_DJANGO_PORT}"
+    env_file: .env
+    depends_on:
+      - redis
+  celery:
+    build: .
+    container_name: django_celery
+    command: bash -c "celery -A ${APP_NAME} worker -l INFO --pool=solo"
+    volumes:
+      - .:/usr/src/app
+    depends_on:
+      - django
+      - redis
+  celery-beat:
+    build: .
+    container_name: django_celery_beat
+    command: celery -A ${APP_NAME} beat -l INFO
+    volumes:
+      - .:/usr/src/app
+    depends_on:
+      - celery
+  celery-flower:
+    build: .
+    volumes:
+      - .:/usr/src/app
+    container_name: flower
+    command: celery -A ${APP_NAME} flower
+    ports:
+      - "${LOCAL_FLOWER_PORT}:${REMOTER_FLOWER_PORT}"
+    environment:
+      - CELERY_BROKER_URL=${CELERY_BROKER}
+      - FLOWER_BASIC_AUTH=${FLOWER_USER_PASSWORD}
+    depends_on:
+      - redis
+      - celery
+  redis:
+    volumes:
+      - ./docker/redis:/data
+    ports:
+      - "${LOCAL_REDIS_PORT}:${REMOTER_REDIS_PORT}"
+    image: "redis:alpine"
+
+volumes:
+  django:
+  celery:
+  celery-beat:
+  celery-flower:
+  redis:
